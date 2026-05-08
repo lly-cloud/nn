@@ -4,7 +4,7 @@
 ---
 
 ## 📁 项目结构
-- `Main.py` – 主程序，运行 CARLA 仿真，集成基于 YOLO 的交通标志检测与车辆控制功能。
+- `main.py` – 主程序，运行 CARLA 仿真，集成基于 YOLO 的交通标志检测与车辆控制功能。
 
 ---
 
@@ -24,7 +24,7 @@ pip install carla pygame numpy torch ultralytics
 ## 📦 使用的预训练模型
 ### 🧠 YOLOv8n
 - **模型文件**：`yolov8n.pt`
-- **来源**：由 [Ultralytics](https://github.com/ultralytics/ultralytics) 提供
+- **直接下载链接**：https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt
 - **用途**：从 RGB 相机输入中实时检测交通标志（如停车标志、限速标志）
 
 脚本加载模型代码：
@@ -42,6 +42,7 @@ model = YOLO("yolov8n.pt")
 - 识别交通信号灯（红灯时制动）
 - 在随机位置生成动态交通流与交通标志
 - 通过 Pygame 实时显示画面
+- 实时显示行驶时间、当前车速、最高车速
 - 仿真运行 2 分钟后自动停止
 
 ---
@@ -63,6 +64,7 @@ model = YOLO("yolov8n.pt")
 
 4. **可视化**
    - 通过 Pygame 显示驾驶员视角画面
+   - 实时显示：行驶时间、当前车速、最高车速
    - 在终端输出检测结果与车辆动作日志
 
 ---
@@ -75,19 +77,19 @@ model = YOLO("yolov8n.pt")
 
 2. **运行 Python 脚本**
    ```bash
-   python Main.py
+   python main.py
    ```
-
 仿真将持续运行 2 分钟并自动停止。
-
 ---
-
 ## 🧼 资源清理
 仿真结束后会自动销毁所有实体（车辆、传感器、交通标志等），避免内存泄漏。
-
 ---
-
 ## 📌 注意事项
 - 目前检测为基础实现，使用轻量模型 `yolov8n`。如需更高精度，可替换为 `yolov8s.pt`、`yolov8m.pt` 等模型。
 - 需确保 CARLA 场景中包含脚本所引用的交通标志模型资源。
 - 检测依赖 YOLO 预设类别，如需精准分类交通标志，建议重新训练模型。
+
+
+
+
+
