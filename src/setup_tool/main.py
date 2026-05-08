@@ -10,11 +10,10 @@ Usage:
 
 import time
 import sys
-from datetime import datetime, timedelta
 
 
 class ProgressDemo:
-    """进度显示演示类"""
+    """用于演示 setup 过程中的进度显示、状态输出和汇总信息"""
 
     def __init__(self, total_steps=11):
         self.total_steps = total_steps
@@ -26,8 +25,9 @@ class ProgressDemo:
         self.step_times = []
 
     def show_progress(self, description):
-        """显示进度条"""
+        """更新当前步骤并打印带百分比和 ETA 的进度信息"""
         self.current_step += 1
+        # 根据当前步骤计算进度百分比
         percent = int(self.current_step * 100 / self.total_steps)
 
         # 计算已用时间
@@ -36,6 +36,7 @@ class ProgressDemo:
 
         # 估算剩余时间
         if self.current_step > 1:
+            # 基于已执行步骤的平均耗时估算剩余时间
             avg_time = elapsed / (self.current_step - 1)
             remaining = avg_time * (self.total_steps - self.current_step + 1)
             remain_m, remain_s = divmod(int(remaining), 60)
@@ -44,6 +45,7 @@ class ProgressDemo:
 
         # 构建进度条
         bar_size = percent // 2
+        # 生成固定宽度的文本进度条
         progress_bar = "#" * bar_size + " " * (50 - bar_size)
 
         # 显示进度
@@ -58,7 +60,7 @@ class ProgressDemo:
         sys.stdout.flush()
 
     def step_result(self, status, message):
-        """显示步骤结果"""
+        """显示单个步骤的执行结果，并统计不同状态的数量"""
         if status == "skip":
             self.skipped += 1
             print(f"  [SKIP] {message}")
@@ -74,7 +76,8 @@ class ProgressDemo:
         sys.stdout.flush()
 
     def show_summary(self):
-        """显示汇总信息"""
+        """输出整个演示流程的最终汇总信息"""
+        # 统计总耗时并输出最终汇总
         total_time = int(time.time() - self.start_time)
         tm, ts = divmod(total_time, 60)
 
@@ -92,7 +95,7 @@ class ProgressDemo:
 
 
 def main():
-    """主函数：演示进度显示功能"""
+    """按顺序执行 setup 进度显示演示。"""
     print()
     print("=" * 80)
     print("              Setup.bat Progress Display - DEMO VERSION")
@@ -102,72 +105,109 @@ def main():
     print("=" * 80)
     print()
 
-    demo = ProgressDemo()
 
-    # Step 1
-    demo.show_progress("Checking hutb_downloader.exe")
-    time.sleep(1)
-    demo.step_result("skip", "hutb_downloader.exe already exists")
+    steps = [
+        {
+            "description": "Checking hutb_downloader.exe",
+            "actions": [
+                {"type": "sleep", "seconds": 1},
+                {"type": "result", "status": "skip", "message": "hutb_downloader.exe already exists"},
+            ],
+        },
+        {
+            "description": "Checking dependencies directory",
+            "actions": [
+                {"type": "sleep", "seconds": 1},
+                {"type": "result", "status": "skip", "message": "dependencies directory already exists"},
+            ],
+        },
+        {
+            "description": "Checking for existing processes",
+            "actions": [
+                {"type": "sleep", "seconds": 1},
+                {"type": "result", "status": "ok", "message": "Killed 2 process(es) on port 2000"},
+            ],
+        },
+        {
+            "description": "Checking hutb directory",
+            "actions": [
+                {"type": "sleep", "seconds": 1},
+                {"type": "result", "status": "skip", "message": "hutb directory already exists"},
+            ],
+        },
+        {
+            "description": "Checking 7zip prerequisites",
+            "actions": [
+                {"type": "sleep", "seconds": 1},
+                {"type": "result", "status": "ok", "message": "7zip extracted successfully"},
+            ],
+        },
+        {
+            "description": "Checking miniconda3 prerequisites",
+            "actions": [
+                {"type": "sleep", "seconds": 1},
+                {"type": "print", "message": "  Extracting miniconda3 (simulated delay)..."},
+                {"type": "sleep", "seconds": 2},
+                {"type": "result", "status": "ok", "message": "miniconda3 extracted successfully"},
+            ],
+        },
+        {
+            "description": "Validating Python environment",
+            "actions": [
+                {"type": "sleep", "seconds": 1},
+                {"type": "result", "status": "ok", "message": "Virtual environment found"},
+                {"type": "result", "status": "ok", "message": "Python interpreter found"},
+                {"type": "result", "status": "ok", "message": "numpy_tutorial.py found"},
+            ],
+        },
+        {
+            "description": "Initializing Python environment",
+            "actions": [
+                {"type": "sleep", "seconds": 1},
+                {"type": "print", "message": "  Activating virtual environment..."},
+                {"type": "print", "message": "  Python version: 3.10.0"},
+                {"type": "result", "status": "ok", "message": "Python environment ready"},
+            ],
+        },
+        {
+            "description": "Starting numpy_tutorial.py",
+            "actions": [
+                {"type": "sleep", "seconds": 1},
+                {"type": "result", "status": "ok", "message": "numpy_tutorial.py process started"},
+            ],
+        },
+        {
+            "description": "Waiting for service to be ready",
+            "actions": [
+                {"type": "sleep", "seconds": 2},
+                {"type": "print", "message": "  Waiting for service startup..."},
+                {"type": "sleep", "seconds": 1},
+                {"type": "result", "status": "ok", "message": "numpy_tutorial.py is ready at http://192.168.1.100:3000"},
+            ],
+        },
+        {
+            "description": "Starting CarlaUE4.exe",
+            "actions": [
+                {"type": "sleep", "seconds": 1},
+                {"type": "result", "status": "ok", "message": "CarlaUE4.exe started"},
+            ],
+        },
+    ]
 
-    # Step 2
-    demo.show_progress("Checking dependencies directory")
-    time.sleep(1)
-    demo.step_result("skip", "dependencies directory already exists")
+    demo = ProgressDemo(total_steps=len(steps))
 
-    # Step 3
-    demo.show_progress("Checking for existing processes")
-    time.sleep(1)
-    demo.step_result("ok", "Killed 2 process(es) on port 2000")
+    # 使用统一的数据结构描述步骤，减少 main() 中的重复逻辑
+    for step in steps:
+        demo.show_progress(step["description"])
 
-    # Step 4
-    demo.show_progress("Checking hutb directory")
-    time.sleep(1)
-    demo.step_result("skip", "hutb directory already exists")
+        for action in step["actions"]:
+            if action["type"] == "sleep":
+                time.sleep(action["seconds"])
+            elif action["type"] == "print":
+                print(action["message"])
+            elif action["type"] == "result":
+                demo.step_result(action["status"], action["message"])
 
-    # Step 5
-    demo.show_progress("Checking 7zip prerequisites")
-    time.sleep(1)
-    demo.step_result("ok", "7zip extracted successfully")
-
-    # Step 6
-    demo.show_progress("Checking miniconda3 prerequisites")
-    time.sleep(1)
-    print("  Extracting miniconda3 (simulated delay)...")
-    time.sleep(2)
-    demo.step_result("ok", "miniconda3 extracted successfully")
-
-    # Step 7
-    demo.show_progress("Validating Python environment")
-    time.sleep(1)
-    demo.step_result("ok", "Virtual environment found")
-    demo.step_result("ok", "Python interpreter found")
-    demo.step_result("ok", "numpy_tutorial.py found")
-
-    # Step 8
-    demo.show_progress("Initializing Python environment")
-    time.sleep(1)
-    print("  Activating virtual environment...")
-    print("  Python version: 3.10.0")
-    demo.step_result("ok", "Python environment ready")
-
-    # Step 9
-    demo.show_progress("Starting numpy_tutorial.py")
-    time.sleep(1)
-    demo.step_result("ok", "numpy_tutorial.py process started")
-
-    # Step 10
-    demo.show_progress("Waiting for service to be ready")
-    time.sleep(2)
-    print("  Waiting for service startup...")
-    time.sleep(1)
-    demo.step_result("ok", "numpy_tutorial.py is ready at http://192.168.1.100:3000")
-
-    # Step 11
-    demo.show_progress("Starting CarlaUE4.exe")
-    time.sleep(1)
-    demo.step_result("ok", "CarlaUE4.exe started")
-
-    # Summary
     demo.show_summary()
 
     print()
