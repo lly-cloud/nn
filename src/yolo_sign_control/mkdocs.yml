@@ -1,0 +1,23 @@
+site_name: 交通标志识别与车辆控制
+site_description: 基于 YOLO+CARLA 的交通标志检测与自动驾驶控制系统
+site_url: https://lly-cloud.github.io/nn/src/yolo_sign_control/
+repo_url: https://github.com/lly-cloud/nn/tree/main/src/yolo_sign_control
+
+nav:
+  - 首页: index.md
+
+theme:
+  name: readthedocs
+  highlightjs: true
+
+markdown_extensions:
+  - extra
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js

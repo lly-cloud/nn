@@ -3,3 +3,5 @@ pygame
 numpy
 torch
 ultralytics
+mkdocs
+mkdocs-material

@@ -80,6 +80,8 @@ title: 主页
 
 [__setup_tool模块汇报文档__](./setup_tool/report.md) - setup_tool 模块背景、改进内容、运行方式与效果总结
 
+[__交通标志识别与车辆控制__](./yolo_sign_control/docs/index.md) - 基于YOLO+CARLA的交通标志检测与车辆控制
+
 ## 规划 <span id="planning"></span>
 
 [__导航__](#navigation)
