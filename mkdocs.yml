@@ -2,34 +2,26 @@ site_name: 神经网络
 site_url: https://wengqiuyi.github.io/nn/
 repo_url: https://github.com/OpenHUTB/nn
 edit_uri: edit/main/docs/
-
 theme:
   name: readthedocs
   sticky_navigation: True
   navigation_depth: 3
   features:
     - search.suggest
-
 extra_css: [extra.css]
-
 extra_javascript:
   - extra.js
   - https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML
-
 plugins:
   - search:
       lang: zh
       separator: '[\s\-\.]+'
       min_search_length: 3
-
 extra:
   generator: false
-
 hooks:
   - hooks.py
-
 copyright: OpenHUTB 版权所有 &copy; {year}
-
 nav:
   - 首页: 'index.md'
   - 车道线检测: 'lane_detection/README.md'
@@ -37,7 +29,10 @@ nav:
   - 自动驾驶感知系统: 'carla_yolo_detection/README.md'
   - 自动驾驶车辆语义分割: 'auto_drive_seg/README.md'
   - 交通标志识别控制: 'yolo_sign_control/README.md'
-
+  - 双足人形机器人SAC步态仿真: 'mujoco_running/running.md'
+  - 人形机器人项目: mujoco_hci_sim/README.md
+  - RL-ACC: 'rl_acc/README.md'
+  - CARLA天气鲁棒性测试: 'carla_weather_robustness/README.md'
 markdown_extensions:
   - admonition
   - mdx_math
