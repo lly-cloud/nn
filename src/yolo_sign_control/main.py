@@ -578,6 +578,14 @@ def main():
     # 仿真统计
     stats = SimulationStats()
 
+=======
+
+    # 初始化速度平滑控制器（渐进式加减速）
+    speed_ctrl = SpeedController(ramp_rate=0.04)
+
+    # 仿真统计
+    stats = SimulationStats()
+
     try:
         # 确保pygame已初始化
         if not pygame.get_init():
@@ -602,7 +610,11 @@ def main():
 
         # Spawn NPC traffic
         npc_count = 0
+
+        
+
         for _ in range(args.cars):
+        for _ in range(10):
             traffic_bp = random.choice(blueprint_library.filter('vehicle.*'))
             traffic_spawn = random.choice(map.get_spawn_points())
             npc = world.try_spawn_actor(traffic_bp, traffic_spawn)
