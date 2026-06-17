@@ -559,6 +559,14 @@ def main():
     # 启用控制台 ANSI 支持（Windows 终端）
     enable_ansi_support()
 
+    # 启动横幅
+    print()
+    print("=" * 55)
+    print("   🚗  CARLA Traffic Sign Detection & Control")
+    print("   🔬  YOLOv8 实时检测 · 碰撞预警 · 自动驾驶")
+    print("=" * 55)
+    print()
+
     # 打印配置信息
     print(f"⚙️  Configuration:")
     print(f"   Duration: {args.time}s | Confidence: {args.conf} | NPCs: {args.cars}")
