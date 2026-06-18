@@ -64,8 +64,7 @@ class AutoCollisionCollector:
         # 如果 labels.csv 不存在，创建表头
         if not os.path.exists(self.labels_file):
             with open(self.labels_file, 'w') as f:
-                f.write("filename,label,risk,min_depth,mean_depth,pos_x,pos_y\n")
-
+                     f.write("filename,label,risk,min_depth,mean_depth,max_depth,std_depth,x,y,z\n")
     def connect(self):
         """连接并初始化无人机"""
         print("🔌 正在连接 AirSim...")
@@ -113,8 +112,8 @@ class AutoCollisionCollector:
             filename = f"{prefix}_{timestamp}_{pos.x_val:.1f}_{pos.y_val:.1f}"
 
             # 计算深度统计
-            min_depth = np.min(depth_image)
-            mean_depth = np.mean(depth_image)
+            max_depth = np.max(depth_image)
+            std_depth = np.std(depth_image)
 
             # 保存伪彩色深度图
             depth_norm = cv2.normalize(depth_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
@@ -124,9 +123,9 @@ class AutoCollisionCollector:
 
             # 保存标签到 CSV
             with open(self.labels_file, 'a') as f:
-                f.write(f"{filename},{label},{risk_name},"
-                        f"{min_depth:.2f},{mean_depth:.2f},{pos.x_val:.1f},{pos.y_val:.1f}\n")
-
+                        f.write(f"{filename},{label},{risk_name},"
+                                f"{min_depth:.2f},{mean_depth:.2f},{max_depth:.2f},{std_depth:.2f},"
+                                f"{pos.x_val:.1f},{pos.y_val:.1f},{pos.z_val:.1f}\n")
             if label == 0:
                 self.safe_samples += 1
             else:
@@ -505,10 +504,21 @@ class AutoCollisionCollector:
 
     def get_stats(self):
         """获取采集统计"""
+        total = self.safe_samples + self.danger_samples
+
+        danger_ratio = 0
+        safe_ratio = 0
+
+        if total > 0:
+            danger_ratio = self.danger_samples / total * 100
+            safe_ratio = self.safe_samples / total * 100
+
         return {
             'safe': self.safe_samples,
             'danger': self.danger_samples,
-            'total': self.safe_samples + self.danger_samples
+            'total': total,
+            'safe_ratio': safe_ratio,
+            'danger_ratio': danger_ratio
         }
 
 
@@ -605,6 +615,8 @@ def main():
         print(f"   安全样本: {stats['safe']}")
         print(f"   危险样本: {stats['danger']}")
         print(f"   总计: {stats['total']}")
+        print(f"   安全样本占比: {stats['safe_ratio']:.1f}%")
+        print(f"   危险样本占比: {stats['danger_ratio']:.1f}%")
         print(f"   数据保存: {collector.labels_file}")
         print("=" * 50)
 

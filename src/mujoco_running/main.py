@@ -60,7 +60,15 @@ class ROSCmdVelHandler(threading.Thread):
 
     def _cmd_vel_callback(self, msg):
         raw_speed = float(msg.linear.x)
-        target_turn = float(np.clip(msg.angular.z, -1.0, 1.0) * 0.2)
+        raw_ang = float(msg.angular.z)
+        target_turn = float(np.clip(raw_ang, -1.0, 1.0) * 0.25)
+
+        if abs(target_turn) > 0.08:
+            self.stabilizer.set_walk_speed(0.0)
+            self.stabilizer.set_state("STAND")
+            self.stabilizer.set_turn_angle(target_turn)
+            return
+
         self.stabilizer.set_turn_angle(target_turn)
 
         if abs(raw_speed) < 0.05:
@@ -111,8 +119,8 @@ class KeyboardInputHandler(threading.Thread):
     def run(self):
         print("\n 键盘控制已就绪！")
         print(" W = 缓步前进   S = 停止   R = 复位")
-        print(" X = 缓步后退   A = 左转   D = 右转")
-        print(" 空格 = 回正   1=慢走 2=正常 3=小跑 4=原地踏步")
+        print(" X = 缓步后退   A = 原地左转 / 行进左转   D = 原地右转 / 行进右转")
+        print(" 空格 = 方向回正   1=慢走 2=正常 3=小跑 4=原地踏步")
         print(" P = 加载SAC智能步态")
         print("=====================================\n")
 
@@ -145,13 +153,23 @@ class KeyboardInputHandler(threading.Thread):
             self.stabilizer.set_turn_angle(0)
             print("已复位")
         elif key == 'a':
-            new_t = self.stabilizer.turn_angle + 0.03
-            self.stabilizer.set_turn_angle(new_t)
-            print(f"左转：{new_t:.2f}")
+            if self.stabilizer.state == "STAND":
+                new_t = self.stabilizer.turn_angle + 0.05
+                self.stabilizer.set_turn_angle(new_t)
+                print(f"原地左转角度：{new_t:.2f}")
+            else:
+                new_t = self.stabilizer.turn_angle + 0.05
+                self.stabilizer.set_turn_angle(new_t)
+                print(f"行进左转角度：{new_t:.2f}")
         elif key == 'd':
-            new_t = self.stabilizer.turn_angle - 0.03
-            self.stabilizer.set_turn_angle(new_t)
-            print(f"右转：{new_t:.2f}")
+            if self.stabilizer.state == "STAND":
+                new_t = self.stabilizer.turn_angle - 0.05
+                self.stabilizer.set_turn_angle(new_t)
+                print(f"原地右转角度：{new_t:.2f}")
+            else:
+                new_t = self.stabilizer.turn_angle - 0.05
+                self.stabilizer.set_turn_angle(new_t)
+                print(f"行进右转角度：{new_t:.2f}")
         elif key == ' ':
             self.stabilizer.set_turn_angle(0.0)
             print("方向回正")
@@ -194,7 +212,7 @@ class CPGOscillator:
     def update(self, dt, target_phase=0.0, speed_factor=1.0, turn_factor=0.0, foot_contact=1.0):
         self.update_smooth()
         amp_scale = 0.65 if foot_contact > 0.5 else 1.0
-        self.coupling = self.base_coupling * (1.0 + 0.3 * abs(speed_factor) + 0.5 * abs(turn_factor))
+        self.coupling = self.base_coupling * (1.0 + 0.3 * abs(speed_factor) + 1.2 * abs(turn_factor))
         self.coupling = np.clip(self.coupling, 0.1, 0.5)
         mu = 1.0
         x, y = self.state
@@ -214,7 +232,7 @@ class CPGOscillator:
         self.state = np.array([np.sin(self.phase), np.cos(self.phase)])
 
 
-# ===================== 人形稳定控制器 =====================
+# ===================== 人形稳定控制器=====================
 class HumanoidStabilizer:
     def __init__(self, model_path, train_mode=False):
         self.train_mode = train_mode
@@ -231,8 +249,8 @@ class HumanoidStabilizer:
         self.dt = 0.001
         self.model.opt.timestep = self.dt
         self.model.opt.gravity[2] = -9.81
-        self.model.opt.iterations = 500
-        self.model.opt.tolerance = 1e-8
+        self.model.opt.iterations = 600
+        self.model.opt.tolerance = 1e-9
 
         self.init_wait_time = 7.0
         self._imu_euler_filt = np.zeros(3, dtype=np.float64)
@@ -259,27 +277,27 @@ class HumanoidStabilizer:
             self._actuator_gear_by_joint[joint_name] = self.model.actuator_gear[aid, 0]
             self._actuator_ctrlrange_by_joint[joint_name] = self.model.actuator_ctrlrange[aid]
 
-        # PID参数
-        self.kp_roll = 420.0
-        self.kd_roll = 110.0
-        self.kp_pitch = 400.0
-        self.kd_pitch = 100.0
-        self.kp_yaw = 70.0
-        self.kd_yaw = 40.0
+        # PID参数（增强俯仰控制抗后仰）
+        self.kp_roll = 1200.0
+        self.kd_roll = 300.0
+        self.kp_pitch = 1200.0      # 增加
+        self.kd_pitch = 280.0       # 增加
+        self.kp_yaw = 300.0
+        self.kd_yaw = 110.0
 
-        self.base_kp_hip = 480
-        self.base_kd_hip = 95
-        self.base_kp_knee = 520
-        self.base_kd_knee = 105
-        self.base_kp_ankle = 450
-        self.base_kd_ankle = 110
-        self.kp_waist = 350
-        self.kd_waist = 80
-        self.kp_arm = 40
-        self.kd_arm = 25
+        self.base_kp_hip = 600
+        self.base_kd_hip = 120
+        self.base_kp_knee = 650
+        self.base_kd_knee = 130
+        self.base_kp_ankle = 750
+        self.base_kd_ankle = 180
+        self.kp_waist = 800
+        self.kd_waist = 180
+        self.kp_arm = 60
+        self.kd_arm = 30
 
-        self.integral_limit = 0.12
-        self.integral_yaw_limit = 0.10
+        self.integral_limit = 0.10
+        self.integral_yaw_limit = 0.15
         self.integral_roll = 0.0
         self.integral_pitch = 0.0
         self.integral_yaw = 0.0
@@ -289,7 +307,7 @@ class HumanoidStabilizer:
         self.omega = np.sqrt(self.gravity / self.lipm_height)
 
         self.com_target = np.array([0.05, 0.0, 0.70])
-        self.kp_com = 85.0
+        self.kp_com = 100.0
         self.total_mass = np.sum(self.model.body_mass)
         self.weight = self.total_mass * abs(self.model.opt.gravity[2])
         self.foot_contact_threshold = max(45.0, 0.18 * self.weight)
@@ -310,6 +328,7 @@ class HumanoidStabilizer:
         self.left_foot_force = 0.0
         self.right_foot_force = 0.0
 
+        # 步态参数（动态自适应）
         self.gait_config = {
             "SLOW":     {"freq": 0.28, "amp": 0.20, "coupling": 0.3, "sf": 0.15, "sa": 0.05, "cz": 0.02},
             "NORMAL":   {"freq": 0.40, "amp": 0.25, "coupling": 0.25, "sf": 0.25, "sa": 0.10, "cz": 0.0},
@@ -318,6 +337,8 @@ class HumanoidStabilizer:
         }
         self.gait_mode = "NORMAL"
         self.g = self.gait_config[self.gait_mode]
+        self.speed_freq_gain = 0.25
+        self.speed_amp_gain = 0.10
 
         self.state = "STAND"
         self.state_map = {
@@ -377,14 +398,14 @@ class HumanoidStabilizer:
 
         i = self.joint_name_to_idx
         self.joint_targets[:] = 0
-        self.joint_targets[i["abdomen_y"]] = 0.02
-        self.joint_targets[i["abdomen_x"]] = 0.0
-        self.joint_targets[i["hip_y_right"]] = 0.12
-        self.joint_targets[i["knee_right"]] = -0.72
-        self.joint_targets[i["ankle_y_right"]] = 0.10
-        self.joint_targets[i["hip_y_left"]] = 0.12
-        self.joint_targets[i["knee_left"]] = -0.72
-        self.joint_targets[i["ankle_y_left"]] = 0.10
+        self.joint_targets[i["abdomen_y"]] = 0.01
+        self.joint_targets[i["abdomen_x"]] = 0.02   # 初始轻微前倾，防止后仰
+        self.joint_targets[i["hip_y_right"]] = 0.10
+        self.joint_targets[i["knee_right"]] = -0.65
+        self.joint_targets[i["ankle_y_right"]] = 0.08
+        self.joint_targets[i["hip_y_left"]] = 0.10
+        self.joint_targets[i["knee_left"]] = -0.65
+        self.joint_targets[i["ankle_y_left"]] = 0.08
 
     def _get_sensor_data(self):
         q = self.data.qpos[3:7]
@@ -420,7 +441,21 @@ class HumanoidStabilizer:
     def _state_stand(self):
         self.right_leg_cpg.reset()
         self.left_leg_cpg.reset()
-        self.joint_targets[self.joint_name_to_idx["abdomen_z"]] = self.turn_angle * 0.2
+        i = self.joint_name_to_idx
+        self.joint_targets[i["hip_y_right"]] = 0.10
+        self.joint_targets[i["knee_right"]] = -0.65
+        self.joint_targets[i["ankle_y_right"]] = 0.08
+        self.joint_targets[i["hip_y_left"]] = 0.10
+        self.joint_targets[i["knee_left"]] = -0.65
+        self.joint_targets[i["ankle_y_left"]] = 0.08
+
+        turn_compensate = -0.35 * self.turn_angle
+        self.joint_targets[i["ankle_x_right"]] = turn_compensate
+        self.joint_targets[i["ankle_x_left"]] = turn_compensate
+
+        self.joint_targets[i["abdomen_z"]] = self.turn_angle
+        self.joint_targets[i["abdomen_x"]] = 0.02
+        self.joint_targets[i["abdomen_y"]] = 0.01
 
     def _state_prepare(self):
         if self.walk_start_time is None:
@@ -435,56 +470,81 @@ class HumanoidStabilizer:
     def _state_walk(self):
         s = self.walk_speed
         g = self.g
-        self.right_leg_cpg.set_target(g["freq"] + abs(s) * g["sf"], g["amp"] + abs(s) * g["sa"])
-        self.left_leg_cpg.set_target(g["freq"] + abs(s) * g["sf"], g["amp"] + abs(s) * g["sa"])
 
-        po = 0.05 * self.turn_angle
-        rs, ls = (1.01, 0.99) if self.turn_angle > 0 else (0.99, 1.01) if self.turn_angle < 0 else (1, 1)
+        # 动态步态自适应
+        speed_abs = abs(s)
+        adaptive_freq = g["freq"] + speed_abs * self.speed_freq_gain
+        adaptive_amp = g["amp"] + speed_abs * self.speed_amp_gain
+        adaptive_freq = np.clip(adaptive_freq, 0.2, 0.9)
+        adaptive_amp = np.clip(adaptive_amp, 0.1, 0.45)
+        self.right_leg_cpg.set_target(adaptive_freq, adaptive_amp)
+        self.left_leg_cpg.set_target(adaptive_freq, adaptive_amp)
 
-        r = self.right_leg_cpg.update(self.dt, self.left_leg_cpg.phase + po, s, self.turn_angle,
+        # 转向降速
+        turn_abs = abs(self.turn_angle)
+        if turn_abs > 0.03:
+            speed_scale = max(0.3, 1.0 - turn_abs * 2.0)
+            effective_speed = s * speed_scale
+        else:
+            effective_speed = s
+
+        # 转向相位差
+        phase_offset = 0.12 * self.turn_angle
+        po = np.clip(phase_offset, -0.2, 0.2)
+        rs = 1.0 - 0.3 * max(0, self.turn_angle)
+        ls = 1.0 + 0.3 * min(0, self.turn_angle)
+        rs = np.clip(rs, 0.7, 1.3)
+        ls = np.clip(ls, 0.7, 1.3)
+
+        r = self.right_leg_cpg.update(self.dt, self.left_leg_cpg.phase + po,
+                                      effective_speed, self.turn_angle,
                                       self.foot_contact[0]) * rs
-        l = self.left_leg_cpg.update(self.dt, self.right_leg_cpg.phase - po, s, self.turn_angle,
+        l = self.left_leg_cpg.update(self.dt, self.right_leg_cpg.phase - po,
+                                     effective_speed, self.turn_angle,
                                      self.foot_contact[1]) * ls
 
         i = self.joint_name_to_idx
 
         self.joint_targets[i["hip_y_right"]] = 0.10 + r
         self.joint_targets[i["knee_right"]] = -0.65 - r * 1.8
-        self.joint_targets[i["ankle_y_right"]] = 0.10 + r * 0.6
+        self.joint_targets[i["ankle_y_right"]] = 0.08 + r * 0.6
         self.joint_targets[i["hip_y_left"]] = 0.10 + l
         self.joint_targets[i["knee_left"]] = -0.65 - l * 1.8
-        self.joint_targets[i["ankle_y_left"]] = 0.10 + l * 0.6
+        self.joint_targets[i["ankle_y_left"]] = 0.08 + l * 0.6
 
-        # 重心横移（基底）
         lf = self.left_foot_force
         rf = self.right_foot_force
         force_ratio = (rf - lf) / (rf + lf + 1e-6)
         hip_shift = -0.35 * force_ratio + (l - r) * 0.2
         hip_shift = np.clip(hip_shift, -0.18, 0.18)
-        ankle_x_comp = -0.6 * self._imu_euler_filt[0] - 0.15 * self._imu_angvel_filt[0]
-        ankle_x_comp = np.clip(ankle_x_comp, -0.12, 0.12)
 
-        lateral_lean = 0.0
-        fwd_lean = 0.03
-        twist = self.turn_angle * 0.2
+        turn_ankle_comp = -0.35 * self.turn_angle
+        ankle_x_comp = -1.6 * self._imu_euler_filt[0] - 0.4 * self._imu_angvel_filt[0] + turn_ankle_comp
+        ankle_x_comp = np.clip(ankle_x_comp, -0.35, 0.35)
 
-        arm_swing = 0.03
+        twist = self.turn_angle * 0.4
+
+        arm_swing = 0.015
         self.joint_targets[i["shoulder2_right"]] = arm_swing * l
-        self.joint_targets[i["shoulder2_left"]]  = -arm_swing * r
-        self.joint_targets[i["shoulder1_right"]] = -0.02 * abs(r)
-        self.joint_targets[i["shoulder1_left"]]  = -0.02 * abs(l)
-        self.joint_targets[i["elbow_right"]]     = 0.12
-        self.joint_targets[i["elbow_left"]]      = 0.12
+        self.joint_targets[i["shoulder2_left"]] = -arm_swing * r
+        self.joint_targets[i["shoulder1_right"]] = -0.01 * abs(r)
+        self.joint_targets[i["shoulder1_left"]] = -0.01 * abs(l)
+        self.joint_targets[i["elbow_right"]] = 0.12
+        self.joint_targets[i["elbow_left"]] = 0.12
 
-        self.joint_targets[i["hip_x_right"]]   =  hip_shift
-        self.joint_targets[i["hip_x_left"]]    = -hip_shift
-        self.joint_targets[i["ankle_x_right"]] =  ankle_x_comp
-        self.joint_targets[i["ankle_x_left"]]  = -ankle_x_comp
-        self.joint_targets[i["abdomen_y"]]     = lateral_lean
-        self.joint_targets[i["abdomen_x"]]     = fwd_lean
-        self.joint_targets[i["abdomen_z"]]     = twist
+        self.joint_targets[i["hip_x_right"]] = hip_shift
+        self.joint_targets[i["hip_x_left"]] = -hip_shift
+        self.joint_targets[i["ankle_x_right"]] = ankle_x_comp
+        self.joint_targets[i["ankle_x_left"]] = -ankle_x_comp
 
-        # RL增量叠加（动作范围±0.08）
+        # 防后仰：根据速度动态设定前倾目标（速度越快前倾越大）
+        target_pitch = np.clip(0.02 + abs(effective_speed) * 0.15, 0.0, 0.08)
+        if effective_speed < 0:
+            target_pitch = 0.01
+        self.joint_targets[i["abdomen_x"]] = target_pitch
+        self.joint_targets[i["abdomen_y"]] = 0.0
+        self.joint_targets[i["abdomen_z"]] = twist
+
         leg_joints = ["hip_x_right", "hip_z_right", "hip_y_right", "knee_right", "ankle_y_right", "ankle_x_right",
                       "hip_x_left", "hip_z_left", "hip_y_left", "knee_left", "ankle_y_left", "ankle_x_left"]
         for idx, jn in enumerate(leg_joints):
@@ -514,7 +574,7 @@ class HumanoidStabilizer:
                 self.stop_start_time = None
 
     def set_turn_angle(self, angle):
-        self.turn_angle = np.clip(angle, -0.25, 0.25)
+        self.turn_angle = np.clip(angle, -0.6, 0.6)
 
     def set_walk_speed(self, speed):
         self.walk_speed = np.clip(speed, -0.22, 0.30)
@@ -530,62 +590,69 @@ class HumanoidStabilizer:
         euler, vel, lf, rf, lc, rc = sens["euler"], sens["vel"], sens["lf"], sens["rf"], sens["lc"], sens["rc"]
         self.foot_contact = np.array([rc, lc])
 
-        a = 0.15
+        a = 0.10
         self._imu_euler_filt = (1 - a) * self._imu_euler_filt + a * euler
         self._imu_angvel_filt = (1 - a) * self._imu_angvel_filt + a * vel
 
+        # Roll横向防倾倒
         r_err = -self._imu_euler_filt[0]
         self.integral_roll = np.clip(self.integral_roll + r_err * self.dt, -self.integral_limit, self.integral_limit)
-        r_tor = self.kp_roll * r_err + self.kd_roll * (-self._imu_angvel_filt[0]) + 8 * self.integral_roll
+        r_tor = self.kp_roll * r_err + self.kd_roll * (-self._imu_angvel_filt[0]) + 35 * self.integral_roll
 
+        # Pitch俯仰控制（抗后仰）
         p_err = -self._imu_euler_filt[1]
         self.integral_pitch = np.clip(self.integral_pitch + p_err * self.dt, -self.integral_limit, self.integral_limit)
-        p_tor = self.kp_pitch * p_err + self.kd_pitch * (-self._imu_angvel_filt[1]) + 6 * self.integral_pitch
+        p_tor = self.kp_pitch * p_err + self.kd_pitch * (-self._imu_angvel_filt[1]) + 25 * self.integral_pitch
 
+        # Yaw
         y_err = -self._imu_euler_filt[2]
-        self.integral_yaw = np.clip(self.integral_yaw + y_err * self.dt, -self.integral_yaw_limit,
-                                    self.integral_yaw_limit)
-        y_tor = self.kp_yaw * y_err + self.kd_yaw * (-self._imu_angvel_filt[2]) + 5 * self.integral_yaw
+        self.integral_yaw = np.clip(self.integral_yaw + y_err * self.dt, -self.integral_yaw_limit, self.integral_yaw_limit)
+        y_tor = self.kp_yaw * y_err + self.kd_yaw * (-self._imu_angvel_filt[2]) + 15 * self.integral_yaw
 
-        if abs(self._imu_euler_filt[1]) > 0.7 or abs(self._imu_euler_filt[0]) > 0.7:
+        if abs(self._imu_euler_filt[1]) > 0.6 or abs(self._imu_euler_filt[0]) > 0.5:
             self.set_state("EMERGENCY")
 
         tq = np.zeros(self.num_joints)
         q = self.data.qpos[7:7 + self.num_joints]
         qv = np.clip(self.data.qvel[6:6 + self.num_joints], -6, 6)
 
+        # 腰部关节力矩
         for jn in ["abdomen_z", "abdomen_y", "abdomen_x"]:
             i = self.joint_name_to_idx[jn]
-            e = np.clip(self.joint_targets[i] - q[i], -0.3, 0.3)
+            e = np.clip(self.joint_targets[i] - q[i], -0.2, 0.2)
             base_torque = self.kp_waist * e - self.kd_waist * qv[i]
+            extra = 0.0
             if jn == "abdomen_x":
-                extra = r_tor
-            elif jn == "abdomen_y":
                 extra = p_tor
+                extra += self.kp_pitch * 0.5 * (self.joint_targets[i] - q[i])
+            elif jn == "abdomen_y":
+                extra = r_tor
+                extra -= self.kp_roll * 0.5 * self.turn_angle
             elif jn == "abdomen_z":
                 extra = y_tor
-            else:
-                extra = 0.0
             tq[i] = base_torque + extra
 
+        # 腿部控制
         legs = ["hip_x_right", "hip_z_right", "hip_y_right", "knee_right", "ankle_y_right", "ankle_x_right",
                 "hip_x_left", "hip_z_left", "hip_y_left", "knee_left", "ankle_y_left", "ankle_x_left"]
         for jn in legs:
             i = self.joint_name_to_idx[jn]
             e = np.clip(self.joint_targets[i] - q[i], -0.3, 0.3)
-            ff = np.clip(rf / self._force_factor_norm, 0.5, 1.3) if "right" in jn else np.clip(
-                lf / self._force_factor_norm, 0.5, 1.3)
+            ff = np.clip(rf / self._force_factor_norm, 0.5, 1.3) if "right" in jn else np.clip(lf / self._force_factor_norm, 0.5, 1.3)
 
             if "hip" in jn:
                 kp, kd = self.base_kp_hip * ff, self.base_kd_hip * ff
             elif "knee" in jn:
                 kp, kd = self.base_kp_knee * ff, self.base_kd_knee * ff
-            elif "ankle" in jn:
+            elif "ankle_x" in jn:
+                kp, kd = self.base_kp_ankle * 1.3 * ff, self.base_kd_ankle * 1.3 * ff
+            elif "ankle_y" in jn:
                 kp, kd = self.base_kp_ankle * ff, self.base_kd_ankle * ff
             else:
-                kp, kd = 250, 50
+                kp, kd = 300, 60
             tq[i] = kp * e - kd * qv[i]
 
+        # 手臂稳定
         arms = ["shoulder1_right", "shoulder2_right", "elbow_right", "shoulder1_left", "shoulder2_left", "elbow_left"]
         for jn in arms:
             i = self.joint_name_to_idx[jn]
@@ -608,8 +675,8 @@ class HumanoidStabilizer:
         norm_comz = np.clip((com_z - 0.70) / 0.05, -1.0, 1.0)
 
         included_joints = ["hip_x_right", "hip_z_right", "hip_y_right", "knee_right", "ankle_y_right", "ankle_x_right",
-                           "hip_x_left", "hip_z_left", "hip_y_left", "knee_left", "ankle_y_left", "ankle_x_left",
-                           "abdomen_y", "abdomen_z"]
+                          "hip_x_left", "hip_z_left", "hip_y_left", "knee_left", "ankle_y_left", "ankle_x_left",
+                          "abdomen_y", "abdomen_z"]
         q = self.data.qpos[7:7 + self.num_joints]
         joint_angles = []
         for jn in included_joints:
@@ -648,7 +715,7 @@ class HumanoidStabilizer:
                     v.sync()
                     time.sleep(self.dt)
 
-                print("就绪！W前进 X后退 A/D转弯")
+                print("就绪！W前进 X后退 A/D原地转向/行进转向 空格回正（步态速度自适应，防后仰）")
                 while self.data.time < self.sim_duration:
                     t = self._calculate_stabilizing_torques()
                     self.data.ctrl[:] = self._torques_to_ctrl(t)
@@ -660,7 +727,7 @@ class HumanoidStabilizer:
             ros.stop()
 
 
-# ===================== 强化学习环境 =====================
+# ===================== 强化学习环境（奖励函数细化）=====================
 class HumanoidGaitEnv(gym.Env):
     metadata = {"render_modes": ["human"], "render_fps": 100}
 
@@ -670,13 +737,15 @@ class HumanoidGaitEnv(gym.Env):
         self.target_speed = target_speed
         self.curriculum_stage = curriculum_stage
 
-        obs_dim = 3 + 3 + 2 + 1 + 14 + 14   # 37维
+        obs_dim = 3 + 3 + 2 + 1 + 14 + 14
         self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(obs_dim,), dtype=np.float32)
         self.action_space = spaces.Box(low=-0.08, high=0.08, shape=(14,), dtype=np.float32)
 
         self.max_step = 300
         self.current_step = 0
         self.prev_action = np.zeros(14)
+        self.prev_joint_vel = None
+        self.prev_action_vel = None
 
     def _get_obs(self):
         sens = self.stabilizer._get_sensor_data()
@@ -692,8 +761,8 @@ class HumanoidGaitEnv(gym.Env):
         norm_comz = np.clip((com_z - 0.70) / 0.05, -1.0, 1.0)
 
         included_joints = ["hip_x_right", "hip_z_right", "hip_y_right", "knee_right", "ankle_y_right", "ankle_x_right",
-                           "hip_x_left", "hip_z_left", "hip_y_left", "knee_left", "ankle_y_left", "ankle_x_left",
-                           "abdomen_y", "abdomen_z"]
+                          "hip_x_left", "hip_z_left", "hip_y_left", "knee_left", "ankle_y_left", "ankle_x_left",
+                          "abdomen_y", "abdomen_z"]
         q = self.stabilizer.data.qpos[7:7 + self.stabilizer.num_joints]
         joint_angles = []
         for jn in included_joints:
@@ -734,6 +803,8 @@ class HumanoidGaitEnv(gym.Env):
         self.current_step = 0
         self.prev_action = np.zeros(14)
         self.stabilizer.rl_joint_delta = np.zeros(14)
+        self.prev_joint_vel = None
+        self.prev_action_vel = None
 
         if self.curriculum_stage == 0:
             self.stabilizer.set_walk_speed(0.0)
@@ -748,12 +819,20 @@ class HumanoidGaitEnv(gym.Env):
     def step(self, action):
         self.current_step += 1
         action = np.clip(action, -0.08, 0.08)
+        action_diff = action - self.prev_action
         self.prev_action = action
         self.stabilizer.rl_joint_delta = action
+
+        if self.prev_joint_vel is None:
+            self.prev_joint_vel = self.stabilizer.data.qvel[6:6+self.stabilizer.num_joints].copy()
 
         torques = self.stabilizer._calculate_stabilizing_torques()
         self.stabilizer.data.ctrl[:] = self.stabilizer._torques_to_ctrl(torques)
         mujoco.mj_step(self.stabilizer.model, self.stabilizer.data)
+
+        joint_vel_after = self.stabilizer.data.qvel[6:6+self.stabilizer.num_joints].copy()
+        joint_jerk = np.mean(np.abs(joint_vel_after - self.prev_joint_vel) / self.stabilizer.dt)
+        self.prev_joint_vel = joint_vel_after
 
         obs = self._get_obs()
         sens = self.stabilizer._get_sensor_data()
@@ -763,30 +842,54 @@ class HumanoidGaitEnv(gym.Env):
         lateral_vel = self.stabilizer.data.qvel[1]
         yaw_error = sens["euler"][2]
         com_z = sens["com_z"]
+        lf, rf = sens["lf"], sens["rf"]
 
+        # 奖励函数
         reward = 2.0
-        reward -= 20.0 * (roll ** 2 + pitch ** 2)
-        reward -= 3.0 * (ang_vel[0] ** 2 + ang_vel[1] ** 2)
+        reward -= 25.0 * (roll ** 2 + pitch ** 2)
+        reward -= 4.0 * (ang_vel[0] ** 2 + ang_vel[1] ** 2)
         reward += 2.0 * np.exp(-20.0 * (com_z - 0.70) ** 2)
         reward += 0.3 * (sens["lc"] + sens["rc"])
 
         if self.curriculum_stage > 0:
             target_v = self.target_speed if self.curriculum_stage == 2 else 0.15
             reward += 3.0 * np.exp(-10.0 * (forward_vel - target_v) ** 2)
-            reward -= 2.0 * lateral_vel ** 2
-            reward -= 0.8 * abs(yaw_error)
+            reward -= 2.5 * lateral_vel ** 2
+            reward -= 1.5 * abs(yaw_error)
 
         reward -= 0.08 * np.sum(action ** 2)
 
-        lf = sens["lf"]
-        rf = sens["rf"]
         if (lf + rf) > 1:
             force_asym = (rf - lf) / (rf + lf + 1e-6)
-            reward -= 1.5 * force_asym ** 2
+            reward -= 2.0 * force_asym ** 2
+        # 足端拖曳惩罚
+        r_phase = self.stabilizer.right_leg_cpg.state[0]
+        l_phase = self.stabilizer.left_leg_cpg.state[0]
+        if r_phase > 0.2 and lf > self.stabilizer.foot_contact_threshold * 0.5:
+            reward -= 1.5
+        if l_phase > 0.2 and rf > self.stabilizer.foot_contact_threshold * 0.5:
+            reward -= 1.5
+
+        reward -= 0.02 * joint_jerk
+
+        phase_diff = abs(self.stabilizer.right_leg_cpg.phase - self.stabilizer.left_leg_cpg.phase - np.pi)
+        reward -= 0.5 * phase_diff
+
+        total_power = 0.0
+        for i in range(self.stabilizer.model.nu):
+            ctrl = self.stabilizer.data.ctrl[i]
+            joint_id = self.stabilizer.model.actuator_trnid[i, 0]
+            if joint_id >= 0:
+                vel = self.stabilizer.data.qvel[joint_id]
+                total_power += abs(ctrl * vel)
+        reward -= 0.005 * total_power
+
+        force_change_rate = abs(lf - rf) / (lf + rf + 1e-6)
+        reward -= 0.2 * force_change_rate
 
         terminated = False
-        if abs(roll) > 0.5 or abs(pitch) > 0.5 or com_z < 0.4 or com_z > 1.0:
-            reward -= 30
+        if abs(roll) > 0.4 or abs(pitch) > 0.5 or com_z < 0.4 or com_z > 1.0:
+            reward -= 40
             terminated = True
 
         truncated = self.current_step >= self.max_step
@@ -816,8 +919,8 @@ def train_sac():
     model_file_path = os.path.join(current_directory, "models", "humanoid.xml")
 
     base_env = HumanoidGaitEnv(model_file_path, curriculum_stage=0)
-    curriculum_env = CurriculumWrapper(base_env)  # 保存包装器引用，用于课程升级
-    env = Monitor(curriculum_env)                 # Monitor 用于记录
+    curriculum_env = CurriculumWrapper(base_env)
+    env = Monitor(curriculum_env)
 
     model = SAC(
         "MlpPolicy",
@@ -844,7 +947,7 @@ def train_sac():
     class CurriculumCallback(BaseCallback):
         def __init__(self, env_wrapper, upgrade_interval=30000, verbose=0):
             super().__init__(verbose)
-            self.env_wrapper = env_wrapper  # 保存的是 CurriculumWrapper
+            self.env_wrapper = env_wrapper
             self.upgrade_interval = upgrade_interval
             self.last_upgrade = 0
 
@@ -856,7 +959,7 @@ def train_sac():
 
     curriculum_cb = CurriculumCallback(curriculum_env, upgrade_interval=30000)
 
-    print("开始快速SAC训练(10万步)")
+    print("开始快速SAC训练(10万步，奖励函数已细化)")
     model.learn(
         total_timesteps=100000,
         callback=[clip_callback, curriculum_cb],
@@ -867,11 +970,11 @@ def train_sac():
 
 
 if __name__ == "__main__":
-    # 训练模式（默认启用，完成后可注释掉并开启仿真）
-    #train_sac()
-
-    # 仿真交互模式（取消下面注释，并注释 train_sac() 即可）
+    # 仿真交互模式（默认运行）
     current_directory = os.path.dirname(os.path.abspath(__file__))
     model_file_path = os.path.join(current_directory, "models", "humanoid.xml")
     stabilizer = HumanoidStabilizer(model_file_path)
     stabilizer.simulate_stable_standing()
+
+    # 训练模式（取消下面注释以开启训练）
+    # train_sac()

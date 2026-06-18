@@ -179,20 +179,43 @@ class DroneController:
 
             # 显示飞行进度（每0.5秒更新一次）
             current_time = time.time()
-            if show_progress and current_time - last_print_time >= 0.5:
+            if show_progress and current_time - last_print_time >= 0.3: # 0.3秒更新一次
                 pos = self.get_position()
                 current_distance = (
                     (pos.x_val - x) ** 2 +
                     (pos.y_val - y) ** 2 +
                     (pos.z_val - z) ** 2
                 ) ** 0.5
+                 # 计算进度
                 progress = max(0, min(100, (1 - current_distance / total_distance) * 100)) if total_distance > 0 else 100
+                
+                # 获取速度
                 speed = self.get_speed()
-                print(f"   进度: {progress:5.1f}% | 剩余: {current_distance:5.1f}m | 速度: {speed:.1f}m/s    ", end="\r")
+                
+                # 获取高度（取绝对值）
+                height = abs(pos.z_val)
+                
+                # 获取碰撞状态
+                collision_info = self.client.simGetCollisionInfo()
+                collision_status = "⚠️" if collision_info.has_collided else "✅"
+                
+                # 进度条
+                bar_length = 20
+                filled = int(bar_length * progress / 100)
+                bar = '█' * filled + '░' * (bar_length - filled)
+                
+                # ===== 新增：动态状态栏 =====
+                print(f"\r"
+                      f"进度: {progress:5.1f}% [{bar}] "
+                      f"距离: {current_distance:5.1f}m "
+                      f"高度: {height:5.1f}m "
+                      f"速度: {speed:4.1f}m/s "
+                      f"碰撞: {collision_status}   ", end="")
+                
                 last_print_time = current_time
 
             # 短暂休眠，减少 CPU 占用
-            time.sleep(0.1)
+            time.sleep(0.05)  # 加快更新频率
 
         # 清除进度行
         print(" " * 80, end="\r")
